@@ -5,7 +5,7 @@ import html
 import io
 import logging
 import time
-from datetime import date
+from datetime import date, time as dt_time
 from typing import Any, Callable
 
 import requests
@@ -20,10 +20,10 @@ from urllib3.util.retry import Retry
 
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzmHDwAts60AHnPmNefcVATPE5bYBGspwvAGjGCioaADK5joW5SqB_zdpNRAiCTBAJR/exec"
 
-EXPECTED_CODE_VERSION = "2026-09-17-HISTORY-REPORT-FIX-V8-1"
+EXPECTED_CODE_VERSION = "2026-09-29-DYNAMIC-VOTING-WINDOW-V9"
 REQUEST_TIMEOUT_SECONDS = 18
 MAX_DAILY_COUNT = 10
-APP_UI_VERSION = "V8.1-HISTORY-FIX"
+APP_UI_VERSION = "V9-DYNAMIC-VOTING-WINDOW"
 
 st.set_page_config(
     page_title="MegaServe Tiffin",
@@ -545,7 +545,7 @@ def menu_card(
                     Menu has not been updated yet.
                 </div>
                 <div style="opacity:.55;font-size:.78rem;margin-top:10px;">
-                    Tiffin count entry still works normally during 09:00–11:00 AM.
+                    Tiffin count entry is independent of the menu and follows the active voting window.
                 </div>
             </div>
             """,
@@ -598,6 +598,26 @@ def refresh_button(
 
 def format_money(value: Any) -> str:
     return f"₹{float(value or 0):,.0f}"
+
+
+def parse_hhmm_time(
+    value: Any,
+    fallback: dt_time,
+) -> dt_time:
+    """Parse an API HH:MM value safely for Streamlit time_input."""
+    text = str(value or "").strip()
+
+    try:
+        hour_text, minute_text = text.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text[:2])
+
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return dt_time(hour=hour, minute=minute)
+    except (TypeError, ValueError):
+        pass
+
+    return fallback
 
 
 def analytics_card(
@@ -795,14 +815,17 @@ if role == "user":
             )
         )
 
+        count_window = str(
+            data.get(
+                "count_window",
+                "09:00 AM - 12:00 PM",
+            )
+            or ""
+        )
+
         window_badge(
             open_now,
-            str(
-                data.get(
-                    "count_window",
-                    "09:00 AM - 11:00 AM",
-                )
-            ),
+            count_window,
             str(data.get("server_time", "")),
         )
 
@@ -861,7 +884,7 @@ if role == "user":
             if has_entry:
                 st.info(
                     f"Currently saved: **{saved}**. "
-                    "You can change it again until 11:00 AM."
+                    f"You can change it again while the voting window is open ({count_window})."
                 )
             else:
                 st.info(
@@ -1273,6 +1296,7 @@ if role == "admin":
             "📅 Monthly Analytics",
             "🗓️ Day Report",
             "🍽️ Today Menu",
+            "⏰ Voting Window",
             "👥 Members",
             "💰 Dues",
             "⚙️ Account",
@@ -1617,7 +1641,8 @@ if role == "admin":
 
         if is_open:
             st.info(
-                "This is a LIVE report. Users can still change counts before 11:00 AM."
+                "This is a LIVE report. Users can still change counts while "
+                f"the voting window is open ({data.get('count_window', '')})."
             )
         else:
             st.success(
@@ -2501,6 +2526,117 @@ if role == "admin":
 
                 except AppError as exc:
                     st.error(str(exc))
+
+    # -----------------------------------------------------------------
+    # VOTING WINDOW SETTINGS
+    # -----------------------------------------------------------------
+
+    elif page == "⏰ Voting Window":
+        refresh = refresh_button(
+            "admin_voting_window",
+            "refresh_admin_voting_window",
+        )
+
+        try:
+            settings = lazy_load(
+                "admin_voting_window",
+                lambda: api_post("admin_voting_window"),
+                ttl_seconds=10,
+                force=refresh,
+            )
+        except AppError as exc:
+            st.error(str(exc))
+            st.stop()
+
+        window_badge(
+            bool(settings.get("user_count_window_open", False)),
+            str(settings.get("count_window", "")),
+            str(settings.get("server_time", "")),
+        )
+
+        settings_warning = str(
+            settings.get("settings_warning", "") or ""
+        ).strip()
+        if settings_warning:
+            st.warning(settings_warning)
+
+        st.write("")
+        st.markdown("### User voting window")
+        st.caption(
+            "Times use Asia/Kolkata. The start time is inclusive and the end "
+            "time is exclusive. Example: an end time of 12:00 PM closes user "
+            "editing exactly at 12:00 PM."
+        )
+
+        start_default = parse_hhmm_time(
+            settings.get("start_time"),
+            dt_time(9, 0),
+        )
+        end_default = parse_hhmm_time(
+            settings.get("end_time"),
+            dt_time(12, 0),
+        )
+
+        with st.form("admin_voting_window_form"):
+            left, right = st.columns(2)
+
+            with left:
+                start_time = st.time_input(
+                    "Voting start time",
+                    value=start_default,
+                    step=300,
+                )
+
+            with right:
+                end_time = st.time_input(
+                    "Voting end time",
+                    value=end_default,
+                    step=300,
+                )
+
+            save_window = st.form_submit_button(
+                "Save Voting Window",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if save_window:
+            if start_time >= end_time:
+                st.error(
+                    "Voting end time must be later than the start time on the same day."
+                )
+            else:
+                try:
+                    result = api_post(
+                        "admin_update_voting_window",
+                        start_time=start_time.strftime("%H:%M"),
+                        end_time=end_time.strftime("%H:%M"),
+                    )
+
+                    clear_page_cache(
+                        "admin_voting_window",
+                        "admin_summary",
+                        "admin_today_report",
+                        "user_home",
+                    )
+
+                    st.success(
+                        result.get(
+                            "message",
+                            "Voting window updated.",
+                        )
+                    )
+                    st.rerun()
+
+                except AppError as exc:
+                    st.error(str(exc))
+
+        st.info(
+            "The same values are stored in the Google Sheet tab "
+            f"**{settings.get('settings_sheet', 'Voting Settings')}**. "
+            "You can also edit that sheet directly using HH:MM values such as "
+            "09:00 and 12:00."
+        )
 
     # -----------------------------------------------------------------
     # MENU

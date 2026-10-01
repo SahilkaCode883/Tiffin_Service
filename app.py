@@ -5,6 +5,7 @@ import html
 import io
 import logging
 import time
+from openpyxl import Workbook
 from datetime import date, time as dt_time
 from typing import Any, Callable
 
@@ -52,286 +53,155 @@ st.markdown(
     """
     <style>
     :root {
-        --mega-radius-xl: 24px;
-        --mega-radius-lg: 18px;
-        --mega-radius-md: 14px;
-        --mega-shadow: 0 12px 34px rgba(0, 0, 0, .08);
-        --mega-border: rgba(128, 128, 128, .22);
-        --mega-green: #14b86e;
-        --mega-red: #e25555;
-        --mega-blue: #4c8bf5;
-        --mega-amber: #e7a93b;
-    }
-
-    @keyframes megaFadeUp {
-        from {
-            opacity: 0;
-            transform: translateY(8px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    @keyframes megaPulseSoft {
-        0%, 100% {
-            box-shadow: 0 0 0 0 rgba(20, 184, 110, 0);
-        }
-        50% {
-            box-shadow: 0 0 0 6px rgba(20, 184, 110, .06);
-        }
+        --mega-primary: #6c5ce7;
+        --mega-secondary: #00b894;
+        --mega-accent: #0984e3;
+        --mega-border: rgba(128,128,128,.25);
+        --mega-shadow: 0 12px 35px rgba(0,0,0,.12);
     }
 
     .stApp {
-        color: var(--text-color);
         background:
-            radial-gradient(circle at 8% 0%, rgba(76, 139, 245, .07), transparent 26%),
-            radial-gradient(circle at 92% 0%, rgba(20, 184, 110, .06), transparent 24%),
+            radial-gradient(circle at top left,
+            rgba(108,92,231,.12),
+            transparent 30%),
+            radial-gradient(circle at top right,
+            rgba(0,184,148,.10),
+            transparent 30%),
             var(--background-color);
+        color: var(--text-color);
     }
 
     .block-container {
-        max-width: 1280px;
-        padding-top: 1rem;
-        padding-bottom: 4rem;
+        max-width: 1400px;
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
     }
 
     .mega-hero {
-        position: relative;
-        overflow: hidden;
-        border-radius: var(--mega-radius-xl);
-        padding: 25px 30px;
-        margin-bottom: 18px;
+        border-radius: 30px;
+        padding: 35px 42px;
+        margin-bottom: 25px;
         background:
-            radial-gradient(circle at 85% 15%, rgba(255,255,255,.16), transparent 24%),
-            linear-gradient(135deg, #132238 0%, #1f4e78 52%, #227093 100%);
-        color: #ffffff !important;
-        box-shadow: 0 18px 42px rgba(10, 34, 61, .22);
-        animation: megaFadeUp .34s ease-out both;
-    }
-
-    .mega-hero::after {
-        content: "";
-        position: absolute;
-        width: 170px;
-        height: 170px;
-        right: -45px;
-        bottom: -80px;
-        border-radius: 50%;
-        background: rgba(255,255,255,.08);
+            linear-gradient(135deg,
+            #6c5ce7,
+            #0984e3,
+            #00b894);
+        box-shadow: var(--mega-shadow);
     }
 
     .mega-hero h1,
     .mega-hero p {
-        color: #ffffff !important;
-        position: relative;
-        z-index: 1;
+        color: white !important;
     }
 
     .mega-hero h1 {
-        margin: 0;
-        font-size: 2rem;
-        line-height: 1.15;
-        letter-spacing: -.02em;
+        font-size: 2.4rem;
+        font-weight: 900;
     }
 
-    .mega-hero p {
-        margin: 8px 0 0 0;
-        opacity: .9;
-    }
-
+    .analytics-card,
     .menu-card,
-    .subtle-box,
-    .analytics-card {
-        color: var(--text-color) !important;
+    .subtle-box {
         background: var(--secondary-background-color);
+        color: var(--text-color);
         border: 1px solid var(--mega-border);
+        border-radius: 24px;
+        padding: 22px;
         box-shadow: var(--mega-shadow);
-        animation: megaFadeUp .30s ease-out both;
+        transition: .25s ease;
     }
 
-    .menu-card {
-        border-radius: 20px;
-        padding: 20px 22px;
-        margin: 8px 0 18px 0;
+    .analytics-card:hover,
+    .menu-card:hover {
+        transform: translateY(-4px);
     }
 
-    .menu-title {
-        color: var(--text-color) !important;
-        font-size: 0.78rem;
-        font-weight: 750;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-        opacity: .7;
-        margin-bottom: 8px;
-    }
-
-    .menu-body {
-        color: var(--text-color) !important;
-        font-size: 1.12rem;
-        line-height: 1.62;
-        white-space: pre-wrap;
-    }
-
-    .analytics-card {
-        border-radius: 18px;
-        padding: 16px 18px;
-        margin: 8px 0 12px 0;
-    }
-
-    .analytics-kicker {
-        color: var(--text-color) !important;
-        opacity: .62;
-        font-size: .76rem;
-        font-weight: 750;
-        text-transform: uppercase;
-        letter-spacing: .07em;
+    .analytics-kicker,
+    .analytics-note {
+        color: var(--text-color);
+        opacity: .65;
     }
 
     .analytics-value {
-        color: var(--text-color) !important;
-        margin-top: 6px;
-        font-size: 1.4rem;
-        font-weight: 800;
-        line-height: 1.2;
+        color: var(--text-color);
+        font-size: 1.8rem;
+        font-weight: 900;
     }
 
-    .analytics-note {
-        color: var(--text-color) !important;
-        opacity: .68;
-        margin-top: 5px;
-        font-size: .82rem;
-    }
-
-    .status-open,
-    .status-closed {
-        display: inline-block;
-        border-radius: 999px;
-        padding: 7px 12px;
-        color: var(--text-color) !important;
-        font-weight: 760;
-        font-size: .84rem;
-        border: 1px solid transparent;
-    }
-
-    .status-open {
-        background: rgba(20, 184, 110, .13);
-        border-color: rgba(20, 184, 110, .32);
-        animation: megaPulseSoft 2.8s ease-in-out infinite;
-    }
-
-    .status-closed {
-        background: rgba(226, 85, 85, .13);
-        border-color: rgba(226, 85, 85, .30);
-    }
-
-    .subtle-box {
-        border-radius: 16px;
-        padding: 14px 16px;
-    }
-
-    /* Metrics: explicitly inherit Streamlit theme text colors */
     div[data-testid="stMetric"] {
-        color: var(--text-color) !important;
-        background: var(--secondary-background-color) !important;
+        background: var(--secondary-background-color);
+        color: var(--text-color);
         border: 1px solid var(--mega-border);
-        border-radius: var(--mega-radius-lg);
-        padding: 15px 16px;
-        box-shadow: 0 8px 24px rgba(0,0,0,.06);
-        transition:
-            transform .18s ease,
-            box-shadow .18s ease,
-            border-color .18s ease;
-        animation: megaFadeUp .28s ease-out both;
-    }
-
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(0,0,0,.09);
-        border-color: rgba(76, 139, 245, .32);
+        border-radius: 22px;
+        padding: 18px;
+        box-shadow: var(--mega-shadow);
     }
 
     div[data-testid="stMetricLabel"],
-    div[data-testid="stMetricLabel"] *,
-    div[data-testid="stMetricValue"],
-    div[data-testid="stMetricValue"] * {
+    div[data-testid="stMetricValue"] {
         color: var(--text-color) !important;
     }
 
-    div[data-testid="stMetricLabel"] {
-        font-weight: 680;
-        opacity: .72;
-    }
-
     div[data-testid="stMetricValue"] {
+        font-weight: 900;
+        font-size: 1.8rem;
+    }
+
+    .stButton button,
+    .stFormSubmitButton button,
+    .stDownloadButton button {
+        border-radius: 16px !important;
+        min-height: 44px;
         font-weight: 800;
+        border: none;
     }
 
-    /* Native Streamlit charts remain theme-aware */
-    div[data-testid="stVegaLiteChart"] {
+    .stButton button:hover,
+    .stFormSubmitButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--mega-shadow);
+    }
+
+    div[data-baseweb="radio"] {
         background: var(--secondary-background-color);
-        border: 1px solid var(--mega-border);
-        border-radius: var(--mega-radius-lg);
+        border-radius: 20px;
         padding: 10px;
-        box-shadow: 0 8px 24px rgba(0,0,0,.05);
-        animation: megaFadeUp .32s ease-out both;
-    }
-
-    /* Navigation */
-    div[data-baseweb="radio"] > div {
-        gap: .45rem;
-        flex-wrap: wrap;
-    }
-
-    div[data-baseweb="radio"] label {
-        border-radius: 12px;
-    }
-
-    .stButton > button,
-    .stFormSubmitButton > button,
-    .stDownloadButton > button {
-        border-radius: 12px;
-        min-height: 2.7rem;
-        transition:
-            transform .16s ease,
-            box-shadow .16s ease;
-    }
-
-    .stButton > button:hover,
-    .stFormSubmitButton > button:hover,
-    .stDownloadButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 18px rgba(0,0,0,.08);
+        border: 1px solid var(--mega-border);
     }
 
     div[data-testid="stDataFrame"] {
-        border-radius: 16px;
+        border-radius: 22px;
         overflow: hidden;
         border: 1px solid var(--mega-border);
-        box-shadow: 0 8px 22px rgba(0,0,0,.04);
-        animation: megaFadeUp .28s ease-out both;
     }
 
-    /* Keep captions, labels, inputs readable in both themes */
+    .status-open {
+        background: rgba(0,184,148,.18);
+        border: 1px solid rgba(0,184,148,.4);
+        color: var(--text-color) !important;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 800;
+    }
+
+    .status-closed {
+        background: rgba(214,48,49,.18);
+        border: 1px solid rgba(214,48,49,.4);
+        color: var(--text-color) !important;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 800;
+    }
+
+    /* All markdown text follows selected Streamlit theme */
     .stMarkdown,
-    .stCaption,
-    label,
     p,
-    span {
-        color: inherit;
+    span,
+    label {
+        color: var(--text-color);
     }
 
-    /* Avoid large motion for users who disable animations */
-    @media (prefers-reduced-motion: reduce) {
-        *,
-        *::before,
-        *::after {
-            animation-duration: .001ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: .001ms !important;
-        }
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -510,6 +380,18 @@ def hero(
     )
 
 
+
+def live_indicator(text_value: str = "LIVE SYSTEM") -> None:
+    st.markdown(
+        f"""
+        <div class="live-indicator">
+            <span>🟢</span>{html.escape(text_value)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def menu_card(
     menu_text: str,
     updated_at: str = "",
@@ -598,6 +480,37 @@ def refresh_button(
 
 def format_money(value: Any) -> str:
     return f"₹{float(value or 0):,.0f}"
+
+
+
+def create_excel_download(data: list[dict[str, Any]]) -> bytes:
+    """Create monthly member report Excel file."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Member Report"
+
+    if not data:
+        ws.append(["No data available"])
+    else:
+        headers = list(data[0].keys())
+        ws.append(headers)
+
+        for row in data:
+            ws.append([row.get(h, "") for h in headers])
+
+    for column in ws.columns:
+        max_length = max(
+            len(str(cell.value or "")) for cell in column
+        )
+        ws.column_dimensions[column[0].column_letter].width = min(
+            max_length + 3,
+            35,
+        )
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
 
 
 def parse_hhmm_time(
@@ -750,6 +663,7 @@ with top_left:
     st.caption(
         f"Signed in as **{person_name}** · {role.title()} · UI {APP_UI_VERSION}"
     )
+    live_indicator("MegaServe Live Dashboard")
 
 with top_right:
     if st.button(
@@ -2181,60 +2095,76 @@ if role == "admin":
         st.markdown("### Member breakdown")
 
         if members:
+            member_report_rows = [
+                {
+                    "Name": row.get("person_name", ""),
+                    "User ID": row.get("username", ""),
+                    "Tiffins": row.get("total_tiffins", 0),
+                    "Order Days": row.get("active_days", 0),
+                    "Submitted Days": row.get("submitted_days", 0),
+                    "Zero Days": row.get("zero_days", 0),
+                    "Avg / Order Day": row.get(
+                        "average_per_active_day",
+                        0,
+                    ),
+                    "Amount": row.get("amount", 0),
+                }
+                for row in members
+            ]
+
             st.dataframe(
-                [
-                    {
-                        "Name": row.get("person_name", ""),
-                        "User ID": row.get("username", ""),
-                        "Tiffins": row.get("total_tiffins", 0),
-                        "Order Days": row.get("active_days", 0),
-                        "Submitted Days": row.get("submitted_days", 0),
-                        "Zero Days": row.get("zero_days", 0),
-                        "Avg / Order Day": row.get(
-                            "average_per_active_day",
-                            0,
-                        ),
-                        "Amount": row.get("amount", 0),
-                    }
-                    for row in members
-                ],
+                member_report_rows,
                 hide_index=True,
+                use_container_width=True,
+                height=750,
+            )
+
+            st.download_button(
+                "📥 Download Monthly Member Report Excel",
+                data=create_excel_download(member_report_rows),
+                file_name=f"monthly_member_report_{selected_month}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
 
         st.markdown("### Daily breakdown")
 
         if daily_rows:
+            # Keep the displayed table and downloaded CSV identical.
+            daily_report_rows = [
+                {
+                    "Date": row.get("date", ""),
+                    "Day": row.get("day", ""),
+                    "Total Tiffins": row.get("total_tiffins", 0),
+                    "Ordering": row.get("ordering_persons", 0),
+                    "Submitted": row.get("submitted", 0),
+                    "No Tiffin": row.get("zero_count", 0),
+                    "Pending": row.get("pending", 0),
+                }
+                for row in daily_rows
+            ]
+
             st.dataframe(
-                [
-                    {
-                        "Date": row.get("date", ""),
-                        "Day": row.get("day", ""),
-                        "Total Tiffins": row.get(
-                            "total_tiffins",
-                            0,
-                        ),
-                        "Ordering": row.get(
-                            "ordering_persons",
-                            0,
-                        ),
-                        "Submitted": row.get(
-                            "submitted",
-                            0,
-                        ),
-                        "No Tiffin": row.get(
-                            "zero_count",
-                            0,
-                        ),
-                        "Pending": row.get(
-                            "pending",
-                            0,
-                        ),
-                    }
-                    for row in daily_rows
-                ],
+                daily_report_rows,
                 hide_index=True,
                 use_container_width=True,
+            )
+
+            csv_buffer = io.StringIO()
+            writer = csv.DictWriter(
+                csv_buffer,
+                fieldnames=list(daily_report_rows[0].keys()),
+            )
+            writer.writeheader()
+            writer.writerows(daily_report_rows)
+
+            st.download_button(
+                "📥 Download Daily Breakdown CSV",
+                data=csv_buffer.getvalue().encode("utf-8-sig"),
+                file_name=f"daily_breakdown_{selected_month}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="download_monthly_daily_breakdown_csv",
             )
 
     # -----------------------------------------------------------------

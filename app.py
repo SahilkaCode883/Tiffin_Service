@@ -4,9 +4,10 @@ import csv
 import html
 import io
 import logging
+import re
 import time
 from openpyxl import Workbook
-from datetime import date, time as dt_time
+from datetime import date, datetime, time as dt_time
 from typing import Any, Callable
 
 import requests
@@ -480,6 +481,80 @@ def refresh_button(
 
 def format_money(value: Any) -> str:
     return f"₹{float(value or 0):,.0f}"
+
+
+def normalize_month_key(value: Any) -> str:
+    """
+    Convert supported month representations to the API's YYYY-MM format.
+
+    Supported examples:
+      2026-09
+      2026/09
+      September 2026
+      Sep 2026
+      09-2026
+      09/2026
+
+    Raises ValueError instead of sending an empty/invalid month to the API.
+    """
+    raw = str(value or "").strip()
+
+    if not raw:
+        raise ValueError("Month is missing.")
+
+    # Already canonical.
+    if re.fullmatch(r"\d{4}-\d{2}", raw):
+        year, month = map(int, raw.split("-"))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    # Common numeric formats.
+    for fmt in ("%Y/%m", "%m-%Y", "%m/%Y"):
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.strftime("%Y-%m")
+        except ValueError:
+            pass
+
+    # Common text formats, including values returned as "Month YYYY".
+    for fmt in ("%B %Y", "%b %Y", "%Y %B", "%Y %b"):
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.strftime("%Y-%m")
+        except ValueError:
+            pass
+
+    # JavaScript Date.toString() format, for example:
+    # "Tue Sep 01 2026 00:00:00 GMT+0530 (India Standard Time)"
+    # This can come from Google Apps Script / browser date values.
+    js_date_match = re.search(
+        r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+"
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+"
+        r"\d{1,2}\s+(\d{4})\b",
+        raw,
+        flags=re.IGNORECASE,
+    )
+
+    if js_date_match:
+        month_text = js_date_match.group(1).title()
+        year = int(js_date_match.group(2))
+        parsed = datetime.strptime(
+            f"{month_text} {year}",
+            "%b %Y",
+        )
+        return parsed.strftime("%Y-%m")
+
+    # ISO datetime values such as 2026-09-01T00:00:00.
+    iso_match = re.match(r"^(\d{4})-(\d{2})-\d{2}", raw)
+    if iso_match:
+        year = int(iso_match.group(1))
+        month = int(iso_match.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    raise ValueError(
+        f"Invalid month '{raw}'. Expected YYYY-MM, such as 2026-09."
+    )
 
 
 
@@ -2130,41 +2205,36 @@ if role == "admin":
         st.markdown("### Daily breakdown")
 
         if daily_rows:
-            # Keep the displayed table and downloaded CSV identical.
-            daily_report_rows = [
-                {
-                    "Date": row.get("date", ""),
-                    "Day": row.get("day", ""),
-                    "Total Tiffins": row.get("total_tiffins", 0),
-                    "Ordering": row.get("ordering_persons", 0),
-                    "Submitted": row.get("submitted", 0),
-                    "No Tiffin": row.get("zero_count", 0),
-                    "Pending": row.get("pending", 0),
-                }
-                for row in daily_rows
-            ]
-
             st.dataframe(
-                daily_report_rows,
+                [
+                    {
+                        "Date": row.get("date", ""),
+                        "Day": row.get("day", ""),
+                        "Total Tiffins": row.get(
+                            "total_tiffins",
+                            0,
+                        ),
+                        "Ordering": row.get(
+                            "ordering_persons",
+                            0,
+                        ),
+                        "Submitted": row.get(
+                            "submitted",
+                            0,
+                        ),
+                        "No Tiffin": row.get(
+                            "zero_count",
+                            0,
+                        ),
+                        "Pending": row.get(
+                            "pending",
+                            0,
+                        ),
+                    }
+                    for row in daily_rows
+                ],
                 hide_index=True,
                 use_container_width=True,
-            )
-
-            csv_buffer = io.StringIO()
-            writer = csv.DictWriter(
-                csv_buffer,
-                fieldnames=list(daily_report_rows[0].keys()),
-            )
-            writer.writeheader()
-            writer.writerows(daily_report_rows)
-
-            st.download_button(
-                "📥 Download Daily Breakdown CSV",
-                data=csv_buffer.getvalue().encode("utf-8-sig"),
-                file_name=f"daily_breakdown_{selected_month}.csv",
-                mime="text/csv",
-                use_container_width=True,
-                key="download_monthly_daily_breakdown_csv",
             )
 
     # -----------------------------------------------------------------
@@ -3065,16 +3135,27 @@ if role == "admin":
                 use_container_width=True,
             ):
                 try:
+                    # The API expects the month as YYYY-MM.
+                    # Older rows may contain only month_label, so fall
+                    # back to that display value instead of sending "".
+                    month_value = (
+                        selected_row.get("month")
+                        or selected_row.get("month_key")
+                        or selected_row.get("month_label")
+                    )
+
+                    try:
+                        month_key = normalize_month_key(month_value)
+                    except ValueError as exc:
+                        raise AppError(str(exc)) from exc
+
                     result = api_post(
                         "admin_set_payment",
                         target_member_id=selected_row.get(
                             "member_id",
                             "",
                         ),
-                        month=selected_row.get(
-                            "month",
-                            "",
-                        ),
+                        month=month_key,
                         paid=(
                             new_status == "PAID"
                         ),

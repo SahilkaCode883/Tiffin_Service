@@ -1692,14 +1692,6 @@ def render_vendor_card(v: dict[str, Any], voted: bool) -> None:
 
     menu = str(v.get("menu") or "").strip()
 
-    try:
-
-        rate = float(v.get("rate") or 0)
-
-    except (TypeError, ValueError):
-
-        rate = 0.0
-
 
 
     left, right = st.columns([1, 5], vertical_alignment="center")
@@ -1712,7 +1704,6 @@ def render_vendor_card(v: dict[str, Any], voted: bool) -> None:
 
         st.markdown(f"**{esc(vendor_name)}**", unsafe_allow_html=True)
 
-        st.caption(f"₹{rate:,.2f} / tiffin")
 
     if voted:
 

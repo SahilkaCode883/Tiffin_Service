@@ -2091,6 +2091,34 @@ def daily_report_display(data: dict[str, Any], *, show_people: bool = True) -> N
 
 
 
+def make_vendor_text_report(day: date, vendor_name: str, orders: list[dict[str, Any]]) -> str:
+    """Create an admin-only, paste-ready vendor report from a single day's orders."""
+    counts: dict[str, int] = {}
+    for order in orders:
+        person = str(order.get('person_name') or '').strip()
+        if not person:
+            continue
+        try:
+            quantity = int(order.get('count', 1))
+        except (TypeError, ValueError) as exc:
+            raise AppError(f'Invalid order quantity for {person}.') from exc
+        if quantity < 0:
+            raise AppError(f'Negative order quantity for {person}.')
+        if quantity:
+            counts[person] = counts.get(person, 0) + quantity
+
+    title = f'TIFFIN REPORT - {day.strftime("%d-%b-%Y")}\nVendor: {vendor_name}'
+    names = [f'{person}: {count}' for person, count in sorted(counts.items(), key=lambda x: x[0].casefold())]
+    return '\n'.join([
+        title, '',
+        *(names or ['No orders for this date.']),
+        '',
+        f'Total Tiffins: {sum(counts.values())}',
+        f'Persons Ordering: {len(counts)}',
+    ])
+
+
+
 def display_rows(rows: list[dict[str, Any]], hide_ids: bool = False) -> None:
 
 
@@ -3125,6 +3153,31 @@ def admin_portal() -> None:
         if st.session_state.get('admin_day_key') == selected:
 
             daily_report_display(api_post('admin_day_report',date=day.isoformat(),member_id=uid,vendor_id=vid))
+
+            # Always fetch a separate full-day admin report, not the filtered analysis.
+            # The vendor portal never receives this person-level report.
+            section_title('Vendor-wise Copy Reports',
+                          'Individual text reports for each vendor, ready to copy or download')
+            # Query each vendor by immutable vendor ID; never match on names alone.
+            for vendor in vendors:
+                vendor_id = str(vendor.get('vendor_id') or '').strip()
+                vendor_name = str(vendor.get('vendor_name') or vendor_id).strip()
+                if not vendor_id:
+                    continue
+                vendor_data = api_post('admin_day_report', date=day.isoformat(),
+                                       member_id='', vendor_id=vendor_id)
+                vendor_orders = vendor_data.get('orders', [])
+                report_text = make_vendor_text_report(day, vendor_name, vendor_orders)
+                with st.container(border=True):
+                    st.markdown(f'**{vendor_name} — {day.strftime("%d-%b-%Y")}**')
+                    st.code(report_text, language=None)  # Native copy-to-clipboard control
+                    st.download_button(
+                        f'Download {vendor_name} report as TXT',
+                        data=report_text.encode('utf-8'),
+                        file_name=f'tiffin_{vendor_id}_{day.isoformat()}.txt',
+                        mime='text/plain',
+                        key=f'admin_vendor_report_{vendor_id}_{day.isoformat()}',
+                    )
 
 
 
